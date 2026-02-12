@@ -237,20 +237,136 @@
 class CartManager {
   constructor() {
     this.cart = [];
+    this.stockMap = new Map();
+    this.stockObserver = null;
     this.init();
   }
 
   async init() {
     await this.loadCart();
+    await this.loadStockData();
+    this.updateStockAvailability();
     this.attachEventListeners();
+    this.observeProductCards();
+    document.addEventListener('header:loaded', () => {
+      this.updateCartUI();
+      this.updateStockAvailability();
+    });
   }
 
   async loadCart() {
-    const response = await fetch('/api/cart');
-    if (response.ok) {
-      this.cart = await response.json();
-      this.updateCartUI();
+    try {
+      const response = await fetch('/api/cart', { credentials: 'include' });
+      if (response.ok) {
+        this.cart = await response.json();
+        this.updateCartUI();
+      } else if (response.status === 401 || response.status === 403) {
+        this.cart = [];
+        this.updateCartUI();
+      }
+    } catch (error) {
+      console.error('Error loading cart:', error);
     }
+  }
+
+  extractProductFromCard(card, btn) {
+    if (!card) return null;
+    const productId =
+      (card.getAttribute('data-product-id') || btn?.getAttribute('data-id') || '').trim();
+    if (!productId) return null;
+
+    const nameEl = card.querySelector('.product-name');
+    const rawPrice = card.getAttribute('data-price') || btn?.getAttribute('data-price') || '';
+    const parsedPrice = Number(rawPrice);
+    const fallbackText = (card.querySelector('.product-price')?.textContent || '').replace(/[^0-9.]/g, '');
+
+    return {
+      productId,
+      name: nameEl ? nameEl.textContent.trim() : (btn?.getAttribute('data-name') || 'Product'),
+      price: Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : Number(fallbackText) || 0,
+      image: (card.querySelector('img')?.src || btn?.getAttribute('data-image') || '')
+    };
+  }
+
+  async loadStockData() {
+    try {
+      const response = await fetch('/api/products', { credentials: 'include' });
+      if (!response.ok) return;
+      const products = await response.json();
+      this.stockMap.clear();
+      (products || []).forEach((p) => {
+        if (p && p._id) {
+          this.stockMap.set(String(p._id), Number(p.stock || 0));
+        }
+      });
+    } catch (error) {
+      console.error('Error loading stock data:', error);
+    }
+  }
+
+  updateStockAvailability() {
+    const cards = document.querySelectorAll('[data-product-id]');
+    cards.forEach((card) => {
+      const productId = String(card.getAttribute('data-product-id') || '').trim();
+      if (!productId) return;
+
+      let stock = null;
+      if (this.stockMap.has(productId)) {
+        stock = Number(this.stockMap.get(productId));
+      } else if (card.hasAttribute('data-stock')) {
+        stock = Number(card.getAttribute('data-stock'));
+      }
+
+      const priceEl = card.querySelector('.product-price');
+      if (!priceEl) return;
+
+      let stockEl =
+        card.querySelector('.stock-availability') || card.querySelector('.stock-state');
+      if (!stockEl) {
+        stockEl = document.createElement('div');
+        stockEl.className = 'stock-availability';
+        stockEl.style.fontSize = '0.9rem';
+        stockEl.style.fontWeight = '600';
+        stockEl.style.margin = '0.45rem 0 0.7rem';
+        priceEl.insertAdjacentElement('afterend', stockEl);
+      }
+
+      const addBtn = card.querySelector('.btn-add-cart');
+      const buyBtn = card.querySelector('.btn-buy-now');
+
+      if (stock == null || Number.isNaN(stock)) {
+        stockEl.textContent = 'Stock: Available';
+        stockEl.style.color = '#2e7d32';
+        if (addBtn) addBtn.disabled = false;
+        if (buyBtn) buyBtn.disabled = false;
+        return;
+      }
+
+      if (stock <= 0) {
+        stockEl.textContent = 'Out of stock';
+        stockEl.style.color = '#d32f2f';
+        if (addBtn) addBtn.disabled = true;
+        if (buyBtn) buyBtn.disabled = true;
+      } else {
+        stockEl.textContent = `In stock: ${stock}`;
+        stockEl.style.color = '#2e7d32';
+        if (addBtn) addBtn.disabled = false;
+        if (buyBtn) buyBtn.disabled = false;
+      }
+    });
+  }
+
+  observeProductCards() {
+    if (this.stockObserver) return;
+    let rafId = null;
+    this.stockObserver = new MutationObserver(() => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        this.updateStockAvailability();
+      });
+    });
+    this.stockObserver.observe(document.body, { childList: true, subtree: true });
   }
 
   // Unified listener to capture data correctly from HTML
@@ -261,15 +377,12 @@ class CartManager {
       
       if (addBtn || buyBtn) {
         e.preventDefault();
-        const card = e.target.closest('[data-product-id]');
-        if (!card) return;
-
-        const product = {
-          productId: card.getAttribute('data-product-id'), // Fixed ID mapping
-          name: card.querySelector('.product-name').textContent.trim(),
-          price: parseFloat(card.getAttribute('data-price')),
-          image: card.querySelector('img').src
-        };
+        const card =
+          e.target.closest('[data-product-id]') ||
+          e.target.closest('.product-card')?.parentElement ||
+          e.target.closest('.product-card-wrapper');
+        const product = this.extractProductFromCard(card, addBtn || buyBtn);
+        if (!product) return;
 
         if (addBtn) await this.addToCart(product);
         if (buyBtn) this.buyNow(product);
@@ -281,6 +394,7 @@ class CartManager {
     const response = await fetch('/api/cart', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify(product)
     });
 
@@ -301,7 +415,10 @@ class CartManager {
   }
 
   updateCartUI() {
-    const count = this.cart.reduce((sum, i) => sum + (i.quantity || 0), 0);
+    const count = (Array.isArray(this.cart) ? this.cart : []).reduce((sum, i) => {
+      const qty = Number(i && i.quantity);
+      return sum + (Number.isFinite(qty) && qty > 0 ? qty : 1);
+    }, 0);
     // Only update cart badges in the header
     const cartButtons = document.querySelectorAll(
       'a[href="cart.html"], .action-btn[title="Cart"]'

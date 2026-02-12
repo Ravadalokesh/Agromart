@@ -3,11 +3,15 @@ class WishlistManager {
   constructor() {
     this.wishlist = [];
     this.loadWishlist();
+    document.addEventListener('header:loaded', () => {
+      this.updateWishlistBadge();
+      this.updateWishlistButtons();
+    });
   }
 
   async loadWishlist() {
     try {
-      const response = await fetch('/api/wishlist');
+      const response = await fetch('/api/wishlist', { credentials: 'include' });
       if (response.ok) {
         this.wishlist = await response.json();
         this.updateWishlistBadge();
@@ -27,8 +31,9 @@ class WishlistManager {
       const response = await fetch('/api/wishlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
-          productId: product.id,
+          productId: product.productId || product.id,
           name: product.name,
           price: product.price,
           image: product.image,
@@ -55,7 +60,8 @@ class WishlistManager {
   async removeFromWishlist(productId) {
     try {
       const response = await fetch(`/api/wishlist/${productId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -76,8 +82,8 @@ class WishlistManager {
   }
 
   updateWishlistBadge() {
-    const wishlistBtn = document.querySelector('a[href="wishlist.html"]') || document.querySelector('.action-btn[title="Wishlist"]');
-    if (wishlistBtn) {
+    const wishlistBtns = document.querySelectorAll('a[href="wishlist.html"], .action-btn[title="Wishlist"]');
+    wishlistBtns.forEach((wishlistBtn) => {
       let badge = wishlistBtn.querySelector('.badge');
       if (!badge) {
         badge = document.createElement('span');
@@ -87,7 +93,7 @@ class WishlistManager {
       const count = this.getWishlistCount();
       badge.textContent = count;
       badge.style.display = count > 0 ? 'block' : 'none';
-    }
+    });
   }
 
   updateWishlistButtons() {
@@ -147,6 +153,7 @@ document.addEventListener('click', async function(e) {
     const price = parseFloat(productCard.getAttribute('data-price') || priceText.replace(/[₹$,\s]/g, ''));
     
     const product = {
+      productId: productId || `product-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       id: productId || `product-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: productCard.querySelector('.product-name')?.textContent.trim() || 'Product',
       price: price || 0,
