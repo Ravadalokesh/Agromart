@@ -393,6 +393,8 @@
 
           container.querySelectorAll('.btn-add-cart[data-id]').forEach(function(btn) {
             btn.addEventListener('click', function() {
+              // cart.js already handles add-to-cart globally; avoid duplicate API inserts.
+              if (window.cartManager) return;
               if (typeof addToCartFromMarketplace === 'function') addToCartFromMarketplace(btn);
               else if (window.authUser) {
                 fetch('/api/cart', {
@@ -405,7 +407,14 @@
                     price: btn.getAttribute('data-price'),
                     image: btn.getAttribute('data-image')
                   })
-                }).then(function() { alert('Added to cart'); }).catch(function() {});
+                }).then(async function(response) {
+                  if (!response.ok) {
+                    var err = await response.json().catch(function() { return {}; });
+                    alert(err.error || 'Could not add product to cart');
+                    return;
+                  }
+                  alert('Added to cart');
+                }).catch(function() {});
               } else { window.location.href = '/'; }
             });
           });

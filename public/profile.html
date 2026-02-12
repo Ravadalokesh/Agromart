@@ -590,8 +590,14 @@
         document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.profile-content').forEach(c => c.classList.remove('active'));
 
-        document.querySelector(`[onclick="switchTab('${tab}')"]`).classList.add('active');
-        document.getElementById(`${tab}Tab`).classList.add('active');
+        const tabBtn = document.querySelector(`[onclick="switchTab('${tab}')"]`);
+        const tabContent = document.getElementById(`${tab}Tab`);
+        if (!tabBtn || !tabContent || tabBtn.style.display === 'none') {
+          return;
+        }
+
+        tabBtn.classList.add('active');
+        tabContent.classList.add('active');
 
         if (tab === 'cart') loadCart();
         if (tab === 'wishlist') loadWishlist();
@@ -614,7 +620,7 @@
         // Get cart and wishlist tab buttons
         const cartTab = document.querySelector('[onclick="switchTab(\'cart\')"]');
         const wishlistTab = document.querySelector('[onclick="switchTab(\'wishlist\')"]');
-        
+
         if (currentUser.userType === 'seller') {
           badge.textContent = 'Seller';
           sellerTabs.forEach(function(el) { el.style.display = 'block'; });
@@ -651,6 +657,14 @@
           document.getElementById('state').value = currentUser.address.state || '';
           document.getElementById('pincode').value = currentUser.address.pincode || '';
           document.getElementById('country').value = currentUser.address.country || 'India';
+        }
+
+        if (!window.__profileTabApplied) {
+          const requestedTab = new URLSearchParams(window.location.search).get('tab');
+          if (requestedTab) {
+            window.__profileTabApplied = true;
+            switchTab(requestedTab);
+          }
         }
       }
 
@@ -761,30 +775,52 @@
 
       async function loadEarnings() {
         try {
-          // const response = await fetch('/api/seller/earnings');
-          const response = await fetch('/api/seller/earnings', {
-  credentials: 'include'
-});
+          const endpoint = currentUser && currentUser.userType === 'admin'
+            ? '/api/admin/earnings'
+            : '/api/seller/earnings';
+          const response = await fetch(endpoint, { credentials: 'include' });
+          const earnings = await response.json().catch(() => ({}));
 
-          const earnings = await response.json();
+          if (!response.ok) {
+            throw new Error(earnings.error || 'Failed to load earnings');
+          }
 
-          document.getElementById('totalEarnings').textContent = `₹${earnings.totalEarnings.toLocaleString('en-IN')}`;
-          document.getElementById('totalSold').textContent = earnings.totalSold;
-          document.getElementById('totalProducts').textContent = earnings.products;
+          let list = earnings.productsList || earnings.products || [];
+          const totalEarnings = Number(earnings.totalEarnings ?? earnings.totalRevenue ?? 0);
+          const totalSold = Number(earnings.totalSold ?? earnings.totalItemsSold ?? 0);
+          let totalProducts = Array.isArray(list)
+            ? list.length
+            : Number(earnings.totalProducts ?? earnings.products ?? 0);
+
+          // Keep admin earnings product count aligned with "My Products" tab source.
+          if (currentUser && currentUser.userType === 'admin') {
+            const adminProductsRes = await fetch('/api/products/seller', { credentials: 'include' });
+            if (adminProductsRes.ok) {
+              const adminProducts = await adminProductsRes.json();
+              if (Array.isArray(adminProducts)) {
+                list = adminProducts;
+                totalProducts = adminProducts.length;
+              }
+            }
+          }
+
+          document.getElementById('totalEarnings').textContent = `\u20B9${totalEarnings.toLocaleString('en-IN')}`;
+          document.getElementById('totalSold').textContent = totalSold;
+          document.getElementById('totalProducts').textContent = totalProducts;
 
           const earningsContent = document.getElementById('earningsContent');
-          if (earnings.productsList.length === 0) {
+          if (!Array.isArray(list) || list.length === 0) {
             earningsContent.innerHTML = '<p>No products yet.</p>';
             return;
           }
 
           earningsContent.innerHTML = `
             <div class="product-list">
-              ${earnings.productsList.map(product => `
+              ${list.map(product => `
                 <div class="product-item">
                   <div class="product-item-details">
                     <h3>${product.name}</h3>
-                    <p>Sold: ${product.sold} units | Earnings: ₹${product.earnings.toLocaleString('en-IN')}</p>
+                    <p>Sold: ${Number(product.sold || 0)} units | Earnings: \u20B9${Number(product.earnings || 0).toLocaleString('en-IN')}</p>
                   </div>
                 </div>
               `).join('')}
@@ -984,3 +1020,10 @@
     </script>
   </body>
 </html>
+
+
+
+
+
+
+

@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -56,6 +56,53 @@
         grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
         gap: 2rem;
       }
+
+      .products-grid > div {
+        display: flex;
+      }
+
+      .products-grid .product-card {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .products-grid .product-media {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        overflow: hidden;
+      }
+
+      .products-grid .product-media img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .products-grid .product-body {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+      }
+
+      .products-grid .product-actions {
+        margin-top: auto;
+      }
+
+      .stock-state {
+        margin: 0.5rem 0 0.75rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+      }
+
+      .stock-state.in {
+        color: #2e7d32;
+      }
+
+      .stock-state.out {
+        color: #d32f2f;
+      }
     </style>
   </head>
   <body>
@@ -93,7 +140,7 @@
       function stars(v) {
         v = Number(v) || 0;
         var full = Math.floor(v), half = (v - full) >= 0.5 ? 1 : 0, empty = 5 - full - half;
-        return '★'.repeat(full) + (half ? '½' : '') + '☆'.repeat(empty);
+        return '\u2605'.repeat(full) + (half ? '\u00BD' : '') + '\u2606'.repeat(empty);
       }
 
       async function searchProducts() {
@@ -115,11 +162,12 @@
             throw new Error('Search failed');
           }
 
-          const products = await response.json();
+          const finalProducts = await response.json();
+
           const resultsContainer = document.getElementById('searchResults');
           const countElement = document.getElementById('searchCount');
 
-          if (products.length === 0) {
+          if (finalProducts.length === 0) {
             countElement.textContent = 'No results found';
             resultsContainer.innerHTML = `
               <div class="no-results" style="grid-column: 1 / -1;">
@@ -131,18 +179,19 @@
             return;
           }
 
-          countElement.textContent = `Found ${products.length} product${products.length !== 1 ? 's' : ''}`;
+          countElement.textContent = `Found ${finalProducts.length} product${finalProducts.length !== 1 ? 's' : ''}`;
 
           // Check if user is logged in
           const userResponse = await fetch('/api/user', { credentials: 'include' });
           const isUserLoggedIn = userResponse.ok;
 
-          resultsContainer.innerHTML = products.map(p => {
+          resultsContainer.innerHTML = finalProducts.map(p => {
             const sellerLabel = (p.isAgroMart || !p.sellerId) ? 'AgroMart' : (p.sellerId.username || 'Seller');
             const img = p.image || 'images/home-pages pics/seeds.jpg';
+            const isOutOfStock = Number(p.stock || 0) <= 0;
             
             const reviewButton = isUserLoggedIn ? `
-              <button class="btn-review" onclick="reviewManager.openReviewModal('${p._id}', '${(p.name || '').replace(/'/g, "\\'")}'))" style="width: 100%; padding: 0.5rem; margin-bottom: 0.5rem; background: var(--bg-light); border: 2px solid var(--primary-light); border-radius: 8px; color: var(--primary-light); font-weight: 600; cursor: pointer;">
+              <button class="btn-review" onclick="reviewManager.openReviewModal('${p._id}', '${(p.name || '').replace(/'/g, "\\'")}')" style="width: 100%; padding: 0.5rem; margin-bottom: 0.5rem; background: var(--bg-light); border: 2px solid var(--primary-light); border-radius: 8px; color: var(--primary-light); font-weight: 600; cursor: pointer;">
                 <i class="bi bi-star"></i> Write Review
               </button>
             ` : '';
@@ -163,13 +212,16 @@
                       <span class="stars" style="color:#ffc107">${stars(p.rating)}</span>
                       <span class="count">(${p.reviews ? p.reviews.length : 0})</span>
                     </div>
-                    <div class="product-price">₹${p.price.toLocaleString('en-IN')}</div>
+                    <div class="product-price">&#8377;${p.price.toLocaleString('en-IN')}</div>
+                    <div class="stock-state ${isOutOfStock ? 'out' : 'in'}">
+                      ${isOutOfStock ? 'Out of stock' : `In stock: ${Number(p.stock || 0)}`}
+                    </div>
                     ${reviewButton}
                     <div class="product-actions">
-                      <button class="btn-add-cart">
+                      <button class="btn-add-cart" ${isOutOfStock ? 'disabled' : ''}>
                         <i class="bi bi-cart-plus"></i> Add to Cart
                       </button>
-                      <button class="btn-buy-now">
+                      <button class="btn-buy-now" ${isOutOfStock ? 'disabled' : ''}>
                         <i class="bi bi-bag-check"></i> Buy Now
                       </button>
                     </div>
@@ -200,3 +252,8 @@
     </script>
   </body>
 </html>
+
+
+
+
+
