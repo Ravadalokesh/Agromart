@@ -1,6 +1,7 @@
 // Header Component Loader
 async function loadHeader() {
   const currentPage = window.location.pathname.split('/').pop() || 'home.html';
+  const currentTab = new URLSearchParams(window.location.search).get('tab') || '';
   
   // Check user type
   let userType = 'user';
@@ -36,10 +37,11 @@ async function loadHeader() {
       </a>
     `;
   } else if (isSeller) {
+    const productsActive = currentPage === 'seller-products.html' || (currentPage === 'profile.html' && currentTab === 'products');
     // Seller navigation
     navMenuHTML = `
       <li><a href="home.html" ${currentPage === 'home.html' ? 'class="active"' : ''}>Home</a></li>
-      <li><a href="seller-products.html" ${currentPage === 'seller-products.html' ? 'class="active"' : ''}>My Products</a></li>
+      <li><a href="profile.html?tab=products" ${productsActive ? 'class="active"' : ''}>My Products</a></li>
       <li><a href="vegetables-fruits.html" ${currentPage === 'vegetables-fruits.html' ? 'class="active"' : ''}>Fresh Vegetables & Fruits</a></li>
       <li><a href="grains-pulses.html" ${currentPage === 'grains-pulses.html' ? 'class="active"' : ''}>Grains & Pulses</a></li>
       <li><a href="seeds-fertilizers.html" ${currentPage === 'seeds-fertilizers.html' ? 'class="active"' : ''}>Seeds & Fertilizers</a></li>
@@ -119,6 +121,39 @@ async function loadHeader() {
   } else {
     document.body.insertAdjacentHTML('afterbegin', headerHTML);
   }
+
+  // Keep cart badge accurate on every page, even when page-specific scripts
+  // initialize later or are not present.
+  async function refreshHeaderCartCount() {
+    try {
+      const response = await fetch('/api/cart', { credentials: 'include' });
+      if (!response.ok) return;
+      const cart = await response.json();
+      const count = (Array.isArray(cart) ? cart : []).reduce((sum, item) => {
+        const qty = Number(item && item.quantity);
+        return sum + (Number.isFinite(qty) && qty > 0 ? qty : 1);
+      }, 0);
+
+      const cartButtons = document.querySelectorAll(
+        'a[href="cart.html"], .action-btn[title="Cart"]'
+      );
+      cartButtons.forEach((btn) => {
+        let badge = btn.querySelector('.badge');
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'badge';
+          btn.appendChild(badge);
+        }
+        badge.textContent = count;
+        badge.style.display = count > 0 ? 'block' : 'none';
+      });
+    } catch (error) {
+      // Ignore to keep header rendering resilient.
+    }
+  }
+
+  refreshHeaderCartCount();
+  document.dispatchEvent(new CustomEvent('header:loaded'));
 
   // Initialize mobile menu
   const mobileMenuToggle = document.getElementById('mobileMenuToggle');
