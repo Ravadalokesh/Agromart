@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require("express");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
@@ -6,7 +7,7 @@ const path = require("path");
 const cors = require("cors");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 app.set("trust proxy", 1);
 
 // Middleware
@@ -39,10 +40,7 @@ app.use(express.static("src"));
 
 // MongoDB connection
 mongoose
-  .connect("mongodb://localhost:27017/agromart", {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(process.env.MONGODB_URI)
   .then(() => {
     console.log("Connected to MongoDB");
   })
