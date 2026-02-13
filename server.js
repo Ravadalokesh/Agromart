@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require("express");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
@@ -8,6 +7,7 @@ const cors = require("cors");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+app.set("trust proxy", 1);
 
 // Middleware
 app.use(cors());
@@ -21,7 +21,8 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: false, // Set to true if using HTTPS
+      secure: "auto",
+      sameSite: "lax",
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
     },
   }),
@@ -150,6 +151,22 @@ const orderSchema = new mongoose.Schema({
 const User = mongoose.model("User", userSchema);
 const Product = mongoose.model("Product", productSchema);
 const Order = mongoose.model("Order", orderSchema);
+
+const getBaseUrl = (req) => {
+  if (process.env.APP_BASE_URL) {
+    return process.env.APP_BASE_URL.replace(/\/+$/, "");
+  }
+  const protoHeader = req.headers["x-forwarded-proto"];
+  const protocol = (protoHeader ? String(protoHeader).split(",")[0] : req.protocol) || "http";
+  const host = req.get("host");
+  return `${protocol}://${host}`;
+};
+
+const getAdminManagedProductsQuery = (adminId) => {
+  return {
+    $or: [{ isAgroMart: true }, { sellerId: null }, { sellerId: adminId }],
+  };
+};
 
 async function seedAdmin() {
   try {
@@ -309,7 +326,7 @@ app.post("/api/forgot-password", async (req, res) => {
 
     // In production, send email with reset link
     // For development, return the token
-    const resetUrl = `http://localhost:${PORT}/reset-password.html?token=${resetToken}`;
+    const resetUrl = `${getBaseUrl(req)}/reset-password.html?token=${resetToken}`;
 
     res.json({
       success: true,
@@ -698,7 +715,12 @@ app.post("/api/products", requireAuth, async (req, res) => {
 
 app.get("/api/products/seller", requireAuth, async (req, res) => {
   try {
-    const products = await Product.find({ sellerId: req.session.userId });
+    const user = await User.findById(req.session.userId);
+    const query =
+      user && user.userType === "admin"
+        ? getAdminManagedProductsQuery(req.session.userId)
+        : { sellerId: req.session.userId };
+    const products = await Product.find(query);
     res.json(products);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1179,7 +1201,7 @@ app.get("/api/seller/earnings", requireAuth, async (req, res) => {
 
     let products;
     if (user.userType === "admin") {
-      products = await Product.find({ isAgroMart: true });
+      products = await Product.find(getAdminManagedProductsQuery(req.session.userId));
     } else {
       products = await Product.find({ sellerId: req.session.userId });
     }
@@ -1335,7 +1357,9 @@ app.get("/api/admin/earnings", requireAuth, async (req, res) => {
       }
     }
 
-    const agroMartProducts = await Product.find({ isAgroMart: true });
+    const agroMartProducts = await Product.find(
+      getAdminManagedProductsQuery(req.session.userId),
+    );
     let totalEarnings = 0;
     let totalSold = 0;
     agroMartProducts.forEach((p) => {
