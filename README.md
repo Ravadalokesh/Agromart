@@ -2,6 +2,25 @@
 
 A full-stack e-commerce platform for agricultural products with user authentication, cart management, wishlist, and seller features.
 
+
+
+check live : http://56.228.16.118:5000
+ADMIN :
+username : lokesh2004
+password:Admin@12
+
+
+USERS:
+SELLER:
+username:Lokesh12
+password:Lokesh@12
+
+
+CUSTOMER:
+username:Vennela
+password: Vennela@12
+
+
 ## Features
 
 - **User Authentication**: Login and Signup with MongoDB
@@ -120,18 +139,7 @@ pro2modified/
 - Authentication is required for most features
 
 
-check live : http://56.228.16.118:5000
-ADMIN :
-username : lokesh2004
-password:Admin@12
 
-USERS:
-SELLER:
-username:Lokesh12
-password:Lokesh@12
 
-CUSTOMER:
-username:Vennela
-password: Vennela@12
 
 
