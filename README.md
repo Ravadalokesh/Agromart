@@ -118,3 +118,20 @@ pro2modified/
 - Sellers can manage their products and view earnings
 - Customers can shop, add to cart, and place orders
 - Authentication is required for most features
+
+
+check live : http://56.228.16.118:5000
+ADMIN :
+username : lokesh2004
+password:Admin@12
+
+USERS:
+SELLER:
+username:Lokesh12
+password:Lokesh@12
+
+CUSTOMER:
+username:Vennela
+password: Vennela@12
+
+
